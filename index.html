@@ -2,7 +2,10 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Чек-лист покупок</title>
+  <title>Общий чек-лист покупок</title>
+  <!-- Подключаем Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
   <style>
     .done { text-decoration: line-through; color: #999; }
     ul { list-style: none; padding: 0; }
@@ -11,63 +14,81 @@
   </style>
 </head>
 <body>
-  <h1>Список покупок</h1>
+  <h1>Общий список покупок</h1>
   <input type="text" id="newItem" placeholder="Введите вещь...">
   <button id="addBtn">Добавить</button>
   <ul id="list"></ul>
 
   <script>
+    // ========== НАСТРОЙКА FIREBASE ==========
+    const firebaseConfig = {
+        apiKey: "AIzaSyDMuSZYq1VTJgV0_lOC6m2D3EHFtC6Qg3A",
+        authDomain: "baby-828f3.firebaseapp.com",
+        projectId: "baby-828f3",
+        storageBucket: "baby-828f3.firebasestorage.app",
+        messagingSenderId: "681679551177",
+        appId: "1:681679551177:web:bfc81b1c34d9b83c316b18",
+        measurementId: "G-MNKH507MG6"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const itemsRef = database.ref('items'); // путь в базе, где храним список
+
+    // ========== ЭЛЕМЕНТЫ HTML ==========
     const listEl = document.getElementById('list');
     const input = document.getElementById('newItem');
     const addBtn = document.getElementById('addBtn');
 
-    let items = [];
-
-    // Загрузка из localStorage
-    function loadItems() {
-      const saved = localStorage.getItem('shoppingList');
-      if (saved) items = JSON.parse(saved);
-      render();
-    }
-
-    // Сохранение
-    function saveItems() {
-      localStorage.setItem('shoppingList', JSON.stringify(items));
-    }
-
-    // Отрисовка
-    function render() {
+    // ========== ФУНКЦИИ ==========
+    // Отрисовка списка
+    function render(snapshot) {
+      const data = snapshot.val();
       listEl.innerHTML = '';
-      items.forEach((item, index) => {
+      if (!data) return;
+
+      // Превращаем объект из Firebase в массив, сохраняя ключи
+      const items = Object.keys(data).map(key => ({
+        id: key,
+        text: data[key].text,
+        done: data[key].done
+      }));
+
+      items.forEach((item) => {
         const li = document.createElement('li');
         li.textContent = item.text;
         if (item.done) li.classList.add('done');
-        li.addEventListener('click', () => toggleItem(index));
+        li.addEventListener('click', () => toggleItem(item.id));
         listEl.appendChild(li);
       });
     }
 
-    // Добавление
+    // Переключение состояния
+    function toggleItem(id) {
+      const itemRef = itemsRef.child(id);
+      itemRef.transaction(current => {
+        if (current) {
+          current.done = !current.done;
+        }
+        return current;
+      });
+    }
+
+    // Добавление нового пункта
     function addItem() {
       const text = input.value.trim();
       if (!text) return;
-      items.push({ text, done: false });
-      saveItems();
-      render();
+      const newItemRef = itemsRef.push(); // генерирует уникальный ключ
+      newItemRef.set({ text, done: false });
       input.value = '';
     }
 
-    // Переключение
-    function toggleItem(index) {
-      items[index].done = !items[index].done;
-      saveItems();
-      render();
-    }
+    // Слушаем изменения в базе (реалтайм)
+    itemsRef.on('value', render);
 
+    // Обработчики кнопок
     addBtn.addEventListener('click', addItem);
     input.addEventListener('keypress', (e) => { if (e.key === 'Enter') addItem(); });
-
-    loadItems();
   </script>
 </body>
 </html>

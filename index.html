@@ -7,16 +7,83 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
   <style>
-    .done { text-decoration: line-through; color: #999; }
-    ul { list-style: none; padding: 0; }
-    li { cursor: pointer; padding: 8px; border-bottom: 1px solid #eee; }
-    li:hover { background: #f5f5f5; }
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; padding: 0 15px; }
+    h1 { text-align: center; }
+    .form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+    .form-row { display: flex; gap: 8px; }
+    .form-row input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    .form-row button { padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .form-row button:hover { background: #218838; }
+
+    #list { list-style: none; padding: 0; }
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .item:hover { background: #f8f9fa; }
+    .item img {
+      width: 50px;
+      height: 50px;
+      object-fit: cover;
+      border-radius: 4px;
+      flex-shrink: 0;
+      background: #eee;
+    }
+    .item .text {
+      flex: 1;
+      word-break: break-word;
+    }
+    .item .text.done {
+      text-decoration: line-through;
+      color: #999;
+    }
+    .item .toggle {
+      font-size: 24px;
+      user-select: none;
+      cursor: pointer;
+      width: 30px;
+      text-align: center;
+      color: #6c757d;
+      flex-shrink: 0;
+    }
+    .item .toggle.done {
+      color: #28a745;
+    }
+    .item .toggle:hover {
+      transform: scale(1.2);
+    }
+    .item .link-icon {
+      font-size: 18px;
+      color: #007bff;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .item .link-icon:hover {
+      text-decoration: underline;
+    }
+    .loading {
+      text-align: center;
+      color: #888;
+      padding: 10px;
+    }
   </style>
 </head>
 <body>
-  <h1>Общий список покупок</h1>
-  <input type="text" id="newItem" placeholder="Введите вещь...">
-  <button id="addBtn">Добавить</button>
+  <h1>🛒 Общий список покупок</h1>
+  <div class="form">
+    <div class="form-row">
+      <input type="text" id="newItem" placeholder="Название товара (можно оставить пустым для авто-заполнения)...">
+      <button id="addBtn">Добавить</button>
+    </div>
+    <div class="form-row">
+      <input type="url" id="newLink" placeholder="Ссылка на товар (Wildberries, Ozon и др.)">
+    </div>
+  </div>
   <ul id="list"></ul>
 
   <script>
@@ -24,7 +91,7 @@
     const firebaseConfig = {
       apiKey: "AIzaSyDMuSZYq1VTJgV0_lOC6m2D3EHFtC6Qg3A",
       authDomain: "baby-828f3.firebaseapp.com",
-      databaseURL: "https://baby-828f3-default-rtdb.europe-west1.firebasedatabase.app", // ← ДОБАВЛЕНО!
+      databaseURL: "https://baby-828f3-default-rtdb.europe-west1.firebasedatabase.app",
       projectId: "baby-828f3",
       storageBucket: "baby-828f3.firebasestorage.app",
       messagingSenderId: "681679551177",
@@ -38,10 +105,29 @@
 
     // ========== ЭЛЕМЕНТЫ HTML ==========
     const listEl = document.getElementById('list');
-    const input = document.getElementById('newItem');
+    const inputText = document.getElementById('newItem');
+    const inputLink = document.getElementById('newLink');
     const addBtn = document.getElementById('addBtn');
 
-    // ========== ФУНКЦИИ ==========
+    // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+    // Получение метаданных через Microlink
+    async function fetchMetadata(url) {
+      try {
+        const response = await fetch(`https://api.microlink.io?url=${encodeURIComponent(url)}`);
+        if (!response.ok) throw new Error('Ошибка загрузки метаданных');
+        const data = await response.json();
+        if (data.status === 'fail') throw new Error(data.message || 'Не удалось извлечь данные');
+        return {
+          title: data.data?.title || '',
+          image: data.data?.image?.url || data.data?.logo?.url || ''
+        };
+      } catch (error) {
+        console.warn('Не удалось получить метаданные:', error);
+        return { title: '', image: '' };
+      }
+    }
+
+    // ========== ОСНОВНЫЕ ФУНКЦИИ ==========
     function render(snapshot) {
       const data = snapshot.val();
       listEl.innerHTML = '';
@@ -49,15 +135,70 @@
 
       const items = Object.keys(data).map(key => ({
         id: key,
-        text: data[key].text,
-        done: data[key].done
+        text: data[key].text || '',
+        link: data[key].link || '',
+        image: data[key].image || '',
+        done: data[key].done || false
       }));
 
       items.forEach((item) => {
         const li = document.createElement('li');
-        li.textContent = item.text;
-        if (item.done) li.classList.add('done');
-        li.addEventListener('click', () => toggleItem(item.id));
+        li.className = 'item';
+
+        // Блок с картинкой (если есть)
+        if (item.image) {
+          const img = document.createElement('img');
+          img.src = item.image;
+          img.alt = item.text || 'Товар';
+          img.loading = 'lazy';
+          // Открываем ссылку по клику на картинку, если ссылка есть
+          if (item.link) {
+            img.style.cursor = 'pointer';
+            img.addEventListener('click', (e) => {
+              e.stopPropagation();
+              window.open(item.link, '_blank');
+            });
+          }
+          li.appendChild(img);
+        }
+
+        // Текст
+        const textSpan = document.createElement('span');
+        textSpan.className = 'text' + (item.done ? ' done' : '');
+        textSpan.textContent = item.text || 'Без названия';
+        if (item.link) {
+          textSpan.style.cursor = 'pointer';
+          textSpan.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.open(item.link, '_blank');
+          });
+        }
+        li.appendChild(textSpan);
+
+        // Галочка для переключения состояния
+        const toggleSpan = document.createElement('span');
+        toggleSpan.className = 'toggle' + (item.done ? ' done' : '');
+        toggleSpan.textContent = item.done ? '✅' : '⬜';
+        toggleSpan.title = 'Отметить как купленное / не купленное';
+        toggleSpan.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleItem(item.id);
+        });
+        li.appendChild(toggleSpan);
+
+        // Иконка ссылки (если есть)
+        if (item.link) {
+          const linkIcon = document.createElement('span');
+          linkIcon.className = 'link-icon';
+          linkIcon.textContent = '🔗';
+          linkIcon.title = 'Открыть ссылку';
+          linkIcon.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.open(item.link, '_blank');
+          });
+          li.appendChild(linkIcon);
+        }
+
         listEl.appendChild(li);
       });
     }
@@ -69,33 +210,67 @@
           current.done = !current.done;
         }
         return current;
-      })
-      .catch(error => {
+      }).catch(error => {
         console.error('Ошибка переключения:', error);
         alert('Не удалось изменить статус: ' + error.message);
       });
     }
 
-    function addItem() {
-      const text = input.value.trim();
-      if (!text) return;
+    async function addItem() {
+      const text = inputText.value.trim();
+      const link = inputLink.value.trim();
+
+      // Если нет ни текста, ни ссылки – не добавляем
+      if (!text && !link) {
+        alert('Введите хотя бы название или ссылку');
+        return;
+      }
+
+      // Если ссылка есть – пытаемся получить метаданные
+      let image = '';
+      let finalText = text;
+      if (link) {
+        // Показываем индикатор загрузки (можно добавить сообщение)
+        addBtn.disabled = true;
+        addBtn.textContent = 'Загрузка...';
+        try {
+          const meta = await fetchMetadata(link);
+          if (meta.image) image = meta.image;
+          if (meta.title && !text) finalText = meta.title; // автозаполнение названия
+        } catch (e) {
+          // ошибка уже обработана внутри fetchMetadata
+        } finally {
+          addBtn.disabled = false;
+          addBtn.textContent = 'Добавить';
+        }
+      }
+
+      // Если всё ещё нет текста, используем ссылку как текст
+      if (!finalText) finalText = link;
+
       const newItemRef = itemsRef.push();
-      newItemRef.set({ text, done: false })
-        .then(() => {
-          console.log('Добавлено:', text);
-          input.value = '';
-        })
-        .catch(error => {
-          console.error('Ошибка добавления:', error);
-          alert('Не удалось добавить пункт: ' + error.message);
-        });
+      newItemRef.set({
+        text: finalText,
+        link: link,
+        image: image,
+        done: false
+      }).then(() => {
+        console.log('Добавлено:', finalText);
+        inputText.value = '';
+        inputLink.value = '';
+      }).catch(error => {
+        console.error('Ошибка добавления:', error);
+        alert('Не удалось добавить пункт: ' + error.message);
+      });
     }
 
-    // Слушаем изменения в базе
+    // Слушаем изменения в реальном времени
     itemsRef.on('value', render);
 
+    // Обработчики событий
     addBtn.addEventListener('click', addItem);
-    input.addEventListener('keypress', (e) => { if (e.key === 'Enter') addItem(); });
+    inputText.addEventListener('keypress', (e) => { if (e.key === 'Enter') addItem(); });
+    inputLink.addEventListener('keypress', (e) => { if (e.key === 'Enter') addItem(); });
   </script>
 </body>
 </html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Чек-лист покупок</title>
+  <style>
+    .done { text-decoration: line-through; color: #999; }
+    ul { list-style: none; padding: 0; }
+    li { cursor: pointer; padding: 8px; border-bottom: 1px solid #eee; }
+    li:hover { background: #f5f5f5; }
+  </style>
+</head>
+<body>
+  <h1>Список покупок</h1>
+  <input type="text" id="newItem" placeholder="Введите вещь...">
+  <button id="addBtn">Добавить</button>
+  <ul id="list"></ul>
+
+  <script>
+    const listEl = document.getElementById('list');
+    const input = document.getElementById('newItem');
+    const addBtn = document.getElementById('addBtn');
+
+    let items = [];
+
+    // Загрузка из localStorage
+    function loadItems() {
+      const saved = localStorage.getItem('shoppingList');
+      if (saved) items = JSON.parse(saved);
+      render();
+    }
+
+    // Сохранение
+    function saveItems() {
+      localStorage.setItem('shoppingList', JSON.stringify(items));
+    }
+
+    // Отрисовка
+    function render() {
+      listEl.innerHTML = '';
+      items.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.textContent = item.text;
+        if (item.done) li.classList.add('done');
+        li.addEventListener('click', () => toggleItem(index));
+        listEl.appendChild(li);
+      });
+    }
+
+    // Добавление
+    function addItem() {
+      const text = input.value.trim();
+      if (!text) return;
+      items.push({ text, done: false });
+      saveItems();
+      render();
+      input.value = '';
+    }
+
+    // Переключение
+    function toggleItem(index) {
+      items[index].done = !items[index].done;
+      saveItems();
+      render();
+    }
+
+    addBtn.addEventListener('click', addItem);
+    input.addEventListener('keypress', (e) => { if (e.key === 'Enter') addItem(); });
+
+    loadItems();
+  </script>
+</body>
+</html>

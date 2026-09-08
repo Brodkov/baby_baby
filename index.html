@@ -22,18 +22,19 @@
   <script>
     // ========== НАСТРОЙКА FIREBASE ==========
     const firebaseConfig = {
-        apiKey: "AIzaSyDMuSZYq1VTJgV0_lOC6m2D3EHFtC6Qg3A",
-        authDomain: "baby-828f3.firebaseapp.com",
-        projectId: "baby-828f3",
-        storageBucket: "baby-828f3.firebasestorage.app",
-        messagingSenderId: "681679551177",
-        appId: "1:681679551177:web:bfc81b1c34d9b83c316b18",
-        measurementId: "G-MNKH507MG6"
+      apiKey: "AIzaSyDMuSZYq1VTJgV0_lOC6m2D3EHFtC6Qg3A",
+      authDomain: "baby-828f3.firebaseapp.com",
+      databaseURL: "https://baby-828f3-default-rtdb.europe-west1.firebasedatabase.app", // ← ДОБАВЛЕНО!
+      projectId: "baby-828f3",
+      storageBucket: "baby-828f3.firebasestorage.app",
+      messagingSenderId: "681679551177",
+      appId: "1:681679551177:web:bfc81b1c34d9b83c316b18",
+      measurementId: "G-MNKH507MG6"
     };
 
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
-    const itemsRef = database.ref('items'); // путь в базе, где храним список
+    const itemsRef = database.ref('items');
 
     // ========== ЭЛЕМЕНТЫ HTML ==========
     const listEl = document.getElementById('list');
@@ -41,13 +42,11 @@
     const addBtn = document.getElementById('addBtn');
 
     // ========== ФУНКЦИИ ==========
-    // Отрисовка списка
     function render(snapshot) {
       const data = snapshot.val();
       listEl.innerHTML = '';
       if (!data) return;
 
-      // Превращаем объект из Firebase в массив, сохраняя ключи
       const items = Object.keys(data).map(key => ({
         id: key,
         text: data[key].text,
@@ -63,7 +62,6 @@
       });
     }
 
-    // Переключение состояния
     function toggleItem(id) {
       const itemRef = itemsRef.child(id);
       itemRef.transaction(current => {
@@ -71,22 +69,31 @@
           current.done = !current.done;
         }
         return current;
+      })
+      .catch(error => {
+        console.error('Ошибка переключения:', error);
+        alert('Не удалось изменить статус: ' + error.message);
       });
     }
 
-    // Добавление нового пункта
     function addItem() {
       const text = input.value.trim();
       if (!text) return;
-      const newItemRef = itemsRef.push(); // генерирует уникальный ключ
-      newItemRef.set({ text, done: false });
-      input.value = '';
+      const newItemRef = itemsRef.push();
+      newItemRef.set({ text, done: false })
+        .then(() => {
+          console.log('Добавлено:', text);
+          input.value = '';
+        })
+        .catch(error => {
+          console.error('Ошибка добавления:', error);
+          alert('Не удалось добавить пункт: ' + error.message);
+        });
     }
 
-    // Слушаем изменения в базе (реалтайм)
+    // Слушаем изменения в базе
     itemsRef.on('value', render);
 
-    // Обработчики кнопок
     addBtn.addEventListener('click', addItem);
     input.addEventListener('keypress', (e) => { if (e.key === 'Enter') addItem(); });
   </script>
